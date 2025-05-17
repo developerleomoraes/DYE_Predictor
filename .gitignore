@@ -1,0 +1,15 @@
+# Não ignorar arquivos
+!**/.gitkeep
+
+# Ignorar arquivos
+*.csv
+*.png
+*.xlsx
+tmp/*
+.env
+*.txt
+
+# Ignorar diretórios
+.venv/
+.vscode/
+__pycache__/
