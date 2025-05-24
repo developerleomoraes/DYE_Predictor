@@ -3,13 +3,15 @@
 # == GSHEETS: https://docs.awesomeapi.com.br/         == #
 # == ================================================ == #
 from cfg.type_mapping import type_mapping
+from sklearn.preprocessing import MinMaxScaler
 import pandas as pd
+import numpy as np
 import requests
 import time
 
 
 
-
+## == AWESOME API FUNCTIONS =========================================================================
 def get_exchange(coin: str, awesome_api_key: str) -> list:
 
     days_number = 360
@@ -23,7 +25,6 @@ def get_exchange(coin: str, awesome_api_key: str) -> list:
     }
 
   
-    
     ## == DO REQUEST TO API
     url_endpoint = f"https://economia.awesomeapi.com.br/json/daily/{coin}/{days_number}"
     response = requests.request("GET", url_endpoint, headers=headers, params=params)
@@ -33,8 +34,6 @@ def get_exchange(coin: str, awesome_api_key: str) -> list:
     response = response.json()
 
     return response
-
-
 
 
 
@@ -51,7 +50,6 @@ def adjuste_null_values(df: pd.DataFrame, resp: list) -> pd.DataFrame:
 
 
 
-
 def adjust_types(df: pd.DataFrame) -> pd.DataFrame:
 
     for col, dtype in type_mapping.items():
@@ -61,3 +59,8 @@ def adjust_types(df: pd.DataFrame) -> pd.DataFrame:
             df[col] = df[col].astype(dtype)
 
     return df
+## == AWESOME API FUNCTIONS =========================================================================
+
+
+
+
