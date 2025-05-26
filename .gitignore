@@ -2,10 +2,6 @@
 !**/.gitkeep
 
 # Ignorar arquivos
-*.csv
-*.png
-*.xlsx
-tmp/*
 .env
 *.txt
 
