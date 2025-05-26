@@ -1,4 +1,4 @@
-# Guia Completo para Configuração de Ambiente Virtual Python
+bbb# Guia Completo para Configuração de Ambiente Virtual Python
 
 ![Python Virtual Environment](https://img.shields.io/badge/Python-3.10%2B-blue)
 
@@ -8,6 +8,7 @@
 3. [Instalação do Ambiente Virtual](#instalação-do-ambiente-virtual)
 4. [Ativação do Ambiente](#ativação-do-ambiente)
 5. [Gerenciamento de Dependências](#gerenciamento-de-dependências)
+6. [Chaves API's](#chaves-apis)
 
 ---
 
@@ -50,3 +51,14 @@ Após isso, check se o nome do ambiente aparece ao lado esquerdo do path do seu 
 
 Para a instalação das bibliotecas necessárias para rodar o projeto,
 no seu terminal dentro agora do ambiente virtual digite o seguinte comando: `pip install -r requirements.txt`, e agora é apenas escolher o ambiente virtual para rodar o projeto em casos de arquivos .ipynb.
+
+
+## Chaves API's
+
+> Importante mencionar que é necessário criar um arquivo .env contendo as chaves API's das mesmas para execução do projeto
+    As API's utilizada foram: </br>
+        - https://www.alphavantage.co/ </br>
+        - https://www.eia.gov/opendata/ </br>
+        - https://fred.stlouisfed.org/docs/api/fred/
+
+> Vale ressaltar que a documentação de como gerar as chaves API's gratuitas estão nos próprios sites.
