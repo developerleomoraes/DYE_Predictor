@@ -1,38 +1,41 @@
+
 # == ================================================ == #
 # == Get data from Awesome API                        == #
 # == GSHEETS: https://docs.awesomeapi.com.br/         == #
 # == ================================================ == #
 
 
-## == Import libs
+
+## Import Libs
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from datetime import timedelta
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error
-from keras.models import Sequential
-from keras.layers import Dense, Dropout
-from keras.optimizers import Adam
-from keras.callbacks import EarlyStopping
-from datetime import datetime, timedelta
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout
+from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.optimizers import Adam
 
 
 
-class BP_ForexPredictor:
-    def __init__(self, data_path):
+class ForexPredictorLSTM:
+    def __init__(self, data_path, look_back=30):
         self.data_path = data_path
         self.model = None
         self.scaler_X = MinMaxScaler()
         self.scaler_y = MinMaxScaler()
         self.forecast_dates = None
         self.forecast_values = None
+        self.look_back = look_back  # Janela temporal para LSTM
         self.features = ['exchange_rate_USD_EUR', 'exchange_rate_JPY_EUR', 
                         'oil_price', 'sp500', 'interest_rate',
                         'day_of_week', 'month', 'year']
         self.targets = ['exchange_rate_USD_EUR', 'exchange_rate_JPY_EUR']
         
     def load_and_preprocess_data(self):
-        """Carrega e pré-processa os dados"""
+        """Carrega e pré-processa os dados para LSTM"""
         df = pd.read_csv(self.data_path)
         df['date'] = pd.to_datetime(df['date'])
         
@@ -44,22 +47,33 @@ class BP_ForexPredictor:
         X_scaled = self.scaler_X.fit_transform(X)
         y_scaled = self.scaler_y.fit_transform(y)
         
+        # Preparar dados para LSTM (formato [samples, time steps, features])
+        X_lstm, y_lstm = self.create_dataset(X_scaled, y_scaled)
+        
         # Divisão temporal (80% treino, 20% teste)
-        split_idx = int(len(X_scaled) * 0.8)
-        return (X_scaled[:split_idx], y_scaled[:split_idx], 
-                X_scaled[split_idx:], y_scaled[split_idx:], df)
+        split_idx = int(len(X_lstm) * 0.8)
+        return (X_lstm[:split_idx], y_lstm[:split_idx], 
+                X_lstm[split_idx:], y_lstm[split_idx:], df)
     
+
+    def create_dataset(self, X, y):
+        """Cria o dataset no formato adequado para LSTM"""
+        X_lstm, y_lstm = [], []
+        for i in range(self.look_back, len(X)):
+            X_lstm.append(X[i-self.look_back:i, :])
+            y_lstm.append(y[i, :])
+        return np.array(X_lstm), np.array(y_lstm)
     
 
     def build_model(self, input_shape):
-        """Constrói o modelo de rede neural com backpropagation"""
+        """Constrói o modelo LSTM"""
         model = Sequential([
-            Dense(128, input_dim=input_shape, activation='relu'),
+            LSTM(128, input_shape=input_shape, return_sequences=True),
             Dropout(0.3),
-            Dense(64, activation='relu'),
+            LSTM(64, return_sequences=True),
             Dropout(0.2),
+            LSTM(32),
             Dense(32, activation='relu'),
-            Dense(16, activation='relu'),
             Dense(len(self.targets), activation='linear')
         ])
         
@@ -69,10 +83,9 @@ class BP_ForexPredictor:
         return model
     
 
-    
     def train_model(self, X_train, y_train, X_test, y_test):
         """Treina o modelo com early stopping"""
-        early_stop = EarlyStopping(monitor='val_loss', patience=15, restore_best_weights=True)
+        early_stop = EarlyStopping(monitor='val_loss', patience=20, restore_best_weights=True)
         
         history = self.model.fit(
             X_train, y_train,
@@ -86,6 +99,7 @@ class BP_ForexPredictor:
     
 
     
+
     def make_predictions(self, X_test, y_test, df):
         """Faz previsões e avalia o modelo"""
         # Avaliação no conjunto de teste
@@ -100,49 +114,66 @@ class BP_ForexPredictor:
         # Previsão para os próximos 5 dias
         last_dates = [df['date'].iloc[-1] + timedelta(days=i) for i in range(1, 6)]
         
-        # Criar dados de entrada para previsão
-        last_features = df[self.features].iloc[-1:].values
+        # Preparar os últimos 'look_back' dias para previsão
+        last_features = df[self.features].values[-self.look_back:]
+        X_forecast = self.scaler_X.transform(last_features)
+        X_forecast = X_forecast.reshape(1, self.look_back, len(self.features))
         
-        # Para cada dia de previsão, podemos ajustar algumas features conhecidas
-        X_forecast = []
-        for i in range(1, 6):
-            # Criar uma cópia do último registro conhecido
-            new_row = last_features.copy()
+        # Fazer previsões iterativas para cada dia futuro
+        y_forecast = []
+        current_input = X_forecast.copy()
+        
+        for i in range(5):
+            # Fazer previsão
+            pred_scaled = self.model.predict(current_input)[0]
+            pred = self.scaler_y.inverse_transform(pred_scaled.reshape(1, -1))[0]
+            y_forecast.append(pred)
             
-            # Atualizar features que sabemos (como data)
-            future_date = df['date'].iloc[-1] + timedelta(days=i)
-            new_row[0, self.features.index('day_of_week')] = future_date.weekday()
-            new_row[0, self.features.index('month')] = future_date.month
-            new_row[0, self.features.index('year')] = future_date.year
+            # Preparar próximo input (usando a previsão como parte dos dados)
+            new_features = last_features[-1].copy()
+            new_features[0] = pred[0]  # USD/EUR previsto
+            new_features[1] = pred[1]  # JPY/EUR previsto
             
-            X_forecast.append(new_row)
-        
-        X_forecast = np.concatenate(X_forecast, axis=0)
-        X_forecast_scaled = self.scaler_X.transform(X_forecast)
-        
-        # Fazer previsões
-        y_forecast_scaled = self.model.predict(X_forecast_scaled)
-        y_forecast = self.scaler_y.inverse_transform(y_forecast_scaled)
+            # Atualizar features de data
+            future_date = df['date'].iloc[-1] + timedelta(days=i+1)
+            new_features[self.features.index('day_of_week')] = future_date.weekday()
+            new_features[self.features.index('month')] = future_date.month
+            new_features[self.features.index('year')] = future_date.year
+            
+            # Atualizar last_features
+            last_features = np.vstack([last_features[1:], new_features])
+            
+            # Atualizar current_input corretamente (manter formato 3D)
+            new_input = self.scaler_X.transform(new_features.reshape(1, -1))
+            current_input = np.concatenate([
+                current_input[:, 1:, :], 
+                new_input.reshape(1, 1, -1)
+            ], axis=1)
         
         self.forecast_dates = last_dates
-        self.forecast_values = y_forecast
+        self.forecast_values = np.array(y_forecast)
         
         return rmse_usd, rmse_jpy
+
+
+
+
     
-
-
-
-
     def plot_results(self, df):
         """Visualiza os resultados com histórico completo e previsões"""
         plt.figure(figsize=(16, 12))
         
         # 1. Preparar dados completos para plotagem
         X_full = self.scaler_X.transform(df[self.features].values)
-        y_pred_full_scaled = self.model.predict(X_full)
+        X_full_lstm, y_full_lstm = self.create_dataset(X_full, 
+                                                     self.scaler_y.transform(df[self.targets].values))
+        
+        y_pred_full_scaled = self.model.predict(X_full_lstm)
         y_pred_full = self.scaler_y.inverse_transform(y_pred_full_scaled)
         
-        plot_df = df.copy()
+        # Ajustar índices para alinhar com as datas (descartamos os primeiros 'look_back' pontos)
+        plot_dates = df['date'].iloc[self.look_back:].reset_index(drop=True)
+        plot_df = df.iloc[self.look_back:].copy()
         plot_df['USD_EUR_pred'] = y_pred_full[:, 0]
         plot_df['JPY_EUR_pred'] = y_pred_full[:, 1]
         
@@ -179,7 +210,7 @@ class BP_ForexPredictor:
         plt.text(last_date, plt.ylim()[0] + 0.05*(plt.ylim()[1]-plt.ylim()[0]), 
                 ' Fim dos Dados Históricos', ha='left', va='bottom', color='gray')
         
-        plt.title('USD/EUR - Valores Reais vs Previsões', fontsize=14, pad=20)
+        plt.title('USD/EUR - Valores Reais vs Previsões (LSTM)', fontsize=14, pad=20)
         plt.ylabel('Taxa de Câmbio', fontsize=12)
         plt.legend(fontsize=10, loc='upper left')
         plt.grid(True, linestyle='--', alpha=0.5)
@@ -204,7 +235,7 @@ class BP_ForexPredictor:
         plt.text(last_date, plt.ylim()[0] + 0.05*(plt.ylim()[1]-plt.ylim()[0]), 
                 ' Fim dos Dados Históricos', ha='left', va='bottom', color='gray')
         
-        plt.title('JPY/EUR - Valores Reais vs Previsões', fontsize=14, pad=20)
+        plt.title('JPY/EUR - Valores Reais vs Previsões (LSTM)', fontsize=14, pad=20)
         plt.ylabel('Taxa de Câmbio', fontsize=12)
         plt.xlabel('Data', fontsize=12)
         plt.legend(fontsize=10, loc='upper left')
@@ -214,4 +245,3 @@ class BP_ForexPredictor:
         plt.show()
         
         return future_df
-
