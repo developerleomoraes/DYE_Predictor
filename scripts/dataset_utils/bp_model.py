@@ -1,6 +1,5 @@
 # == ================================================ == #
-# == Get data from Awesome API                        == #
-# == GSHEETS: https://docs.awesomeapi.com.br/         == #
+# == CREATE BACKPROPAGATION MODEL                     == #
 # == ================================================ == #
 
 
@@ -36,15 +35,15 @@ class BP_ForexPredictor:
         df = pd.read_csv(self.data_path)
         df['date'] = pd.to_datetime(df['date'])
         
-        # Extrair features e targets
+        
         X = df[self.features].values
         y = df[self.targets].values
         
-        # Normalização
+        ## == Normalize
         X_scaled = self.scaler_X.fit_transform(X)
         y_scaled = self.scaler_y.fit_transform(y)
         
-        # Divisão temporal (80% treino, 20% teste)
+        ## == 80% training | 20% Test
         split_idx = int(len(X_scaled) * 0.8)
         return (X_scaled[:split_idx], y_scaled[:split_idx], 
                 X_scaled[split_idx:], y_scaled[split_idx:], df)
@@ -88,28 +87,26 @@ class BP_ForexPredictor:
     
     def make_predictions(self, X_test, y_test, df):
         """Faz previsões e avalia o modelo"""
-        # Avaliação no conjunto de teste
+
+        X_forecast = []
+        
         y_pred_scaled = self.model.predict(X_test)
         y_pred = self.scaler_y.inverse_transform(y_pred_scaled)
         y_true = self.scaler_y.inverse_transform(y_test)
         
-        # Cálculo do RMSE
+        ## == column
         rmse_usd = np.sqrt(mean_squared_error(y_true[:, 0], y_pred[:, 0]))
         rmse_jpy = np.sqrt(mean_squared_error(y_true[:, 1], y_pred[:, 1]))
         
-        # Previsão para os próximos 5 dias
+        ## == 5 days
         last_dates = [df['date'].iloc[-1] + timedelta(days=i) for i in range(1, 6)]
-        
-        # Criar dados de entrada para previsão
         last_features = df[self.features].iloc[-1:].values
         
-        # Para cada dia de previsão, podemos ajustar algumas features conhecidas
-        X_forecast = []
+        
         for i in range(1, 6):
-            # Criar uma cópia do último registro conhecido
+            
             new_row = last_features.copy()
             
-            # Atualizar features que sabemos (como data)
             future_date = df['date'].iloc[-1] + timedelta(days=i)
             new_row[0, self.features.index('day_of_week')] = future_date.weekday()
             new_row[0, self.features.index('month')] = future_date.month
@@ -120,7 +117,7 @@ class BP_ForexPredictor:
         X_forecast = np.concatenate(X_forecast, axis=0)
         X_forecast_scaled = self.scaler_X.transform(X_forecast)
         
-        # Fazer previsões
+        ## == Predictions
         y_forecast_scaled = self.model.predict(X_forecast_scaled)
         y_forecast = self.scaler_y.inverse_transform(y_forecast_scaled)
         
@@ -137,7 +134,7 @@ class BP_ForexPredictor:
         """Visualiza os resultados com histórico completo e previsões"""
         plt.figure(figsize=(16, 12))
         
-        # 1. Preparar dados completos para plotagem
+        ## == Transform data
         X_full = self.scaler_X.transform(df[self.features].values)
         y_pred_full_scaled = self.model.predict(X_full)
         y_pred_full = self.scaler_y.inverse_transform(y_pred_full_scaled)
@@ -146,34 +143,34 @@ class BP_ForexPredictor:
         plot_df['USD_EUR_pred'] = y_pred_full[:, 0]
         plot_df['JPY_EUR_pred'] = y_pred_full[:, 1]
         
-        # DataFrame com previsões futuras formatado para exibição
+        ## == df
         future_df = pd.DataFrame({
             'Data': self.forecast_dates,
             'USD/EUR_Previsto': self.forecast_values[:, 0],
             'JPY/EUR_Previsto': self.forecast_values[:, 1]
         })
         
-        # 2. Exibir tabela com previsões futuras
+        ## == Future predictions
         print("\nPrevisões para os próximos 5 dias:")
         print(future_df.to_string(index=False, float_format="%.6f"))
         print("\n" + "="*70 + "\n")
         
-        # 3. Gráfico para USD/EUR
+        ## == USD/EUR
         plt.subplot(2, 1, 1)
         
-        # Dados históricos
+        ## == Historical
         plt.plot(plot_df['date'], plot_df['exchange_rate_USD_EUR'], 
                 label='Valor Real', color='#1f77b4', linewidth=2, alpha=0.9)
         
-        # Previsões do modelo
+        ## == Model prediction
         plt.plot(plot_df['date'], plot_df['USD_EUR_pred'], 
                 label='Previsão do Modelo', color='#ff7f0e', linestyle='--', linewidth=1.5, alpha=0.7)
         
-        # Previsões futuras
+        ## 5 days
         plt.plot(future_df['Data'], future_df['USD/EUR_Previsto'], 
                 'ro-', markersize=8, linewidth=2, label='Previsão Futura (5 dias)')
         
-        # Transição histórico/futuro
+        ## ==histórico/futuro
         last_date = plot_df['date'].iloc[-1]
         plt.axvline(x=last_date, color='gray', linestyle=':', linewidth=1)
         plt.text(last_date, plt.ylim()[0] + 0.05*(plt.ylim()[1]-plt.ylim()[0]), 
@@ -184,22 +181,22 @@ class BP_ForexPredictor:
         plt.legend(fontsize=10, loc='upper left')
         plt.grid(True, linestyle='--', alpha=0.5)
         
-        # 4. Gráfico para JPY/EUR
+        ## == JPY/EUR
         plt.subplot(2, 1, 2)
         
-        # Dados históricos
+        ## == Historical
         plt.plot(plot_df['date'], plot_df['exchange_rate_JPY_EUR'], 
                 label='Valor Real', color='#2ca02c', linewidth=2, alpha=0.9)
         
-        # Previsões do modelo
+        ## Model predictions
         plt.plot(plot_df['date'], plot_df['JPY_EUR_pred'], 
                 label='Previsão do Modelo', color='#9467bd', linestyle='--', linewidth=1.5, alpha=0.7)
         
-        # Previsões futuras
+        ## future predictions
         plt.plot(future_df['Data'], future_df['JPY/EUR_Previsto'], 
                 'mo-', markersize=8, linewidth=2, label='Previsão Futura (5 dias)')
         
-        # Transição histórico/futuro
+        ## == historical/future
         plt.axvline(x=last_date, color='gray', linestyle=':', linewidth=1)
         plt.text(last_date, plt.ylim()[0] + 0.05*(plt.ylim()[1]-plt.ylim()[0]), 
                 ' Fim dos Dados Históricos', ha='left', va='bottom', color='gray')
