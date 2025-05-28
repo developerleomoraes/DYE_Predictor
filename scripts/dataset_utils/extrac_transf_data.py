@@ -16,7 +16,14 @@ import matplotlib.pyplot as plt
 
 ## == =============== ALPHA VANTAGE API =============== == ##
 ## Função para obter dados de câmbio usando Alpha Vantage
-def get_exchange_rate_data(start_date: str, end_date: str, from_currency: str, to_currency: str, ALPHA_VANTAGE_API_KEY: str) -> pd.DataFrame:
+## https://www.alphavantage.co/
+def get_exchange_rate_data(
+                            start_date: str, 
+                            end_date: str, 
+                            from_currency: str, 
+                            to_currency: str, 
+                            ALPHA_VANTAGE_API_KEY: str
+                        ) -> pd.DataFrame:
 
     dates = []
     rates = []
@@ -70,10 +77,10 @@ def get_oil_prices(start_date: str, end_date: str, EIA_OIL_API_KEY: str) -> pd.D
         response = requests.request('GET', oil_prices_url, params=params)
         data = response.json()
         
-        # Processa os dados
+
         df = pd.DataFrame(data['response']['data'])
         
-        # Limpa e formata os dados
+
         df = (
             df[['period', 'value']]
             .rename(columns={'period': 'date', 'value': 'oil_price'})
@@ -95,7 +102,7 @@ def get_oil_prices(start_date: str, end_date: str, EIA_OIL_API_KEY: str) -> pd.D
 
 
 ## == ==================== FRED API ====================== == ##
-# Função para obter dados de taxas de juros (FED Funds Rate)
+## == Taxas de juros (FED Funds Rate) - entre bancos
 def get_interest_rates(start_date, end_date, FRED_API_KEY) -> pd.DataFrame:
     print(f"    ↳ Obtendo dados de taxas de juros de {start_date} a {end_date}...")
     
@@ -121,7 +128,7 @@ def get_interest_rates(start_date, end_date, FRED_API_KEY) -> pd.DataFrame:
 
 
 ## == ==================== ALPHA VANTAGE API ====================== == ##
-
+## == 500 U.S companies - stock exchange shares
 def get_sp500(start_date: str, end_date: str, ALPHA_VANTAGE_API_KEY: str) -> pd.DataFrame:
 
     dates = []
@@ -174,39 +181,37 @@ def build_complete_dataset(start_date, end_date) -> pd.DataFrame:
     EIA_OIL_API_KEY = os.getenv('EIA_OIL_API_KEY')
 
 
-    # Obter dados de câmbio para ambos os pares
+    ## USD/EUR & JPY/EUR
     usd_eur_df = get_exchange_rate_data(start_date, end_date, 'USD', 'EUR', ALPHA_VANTAGE_API_KEY)
     jpy_eur_df = get_exchange_rate_data(start_date, end_date, 'JPY', 'EUR', ALPHA_VANTAGE_API_KEY)
     
-    # Combinar os dados de câmbio primeiro
     df = usd_eur_df.merge(jpy_eur_df, on='date', how='outer')
     
-    # Obter outros dados econômicos
+    ## Variables
     oil_df = get_oil_prices(start_date, end_date, EIA_OIL_API_KEY)
     interest_df = get_interest_rates(start_date, end_date, FRED_API_KEY)
     sp500_df = get_sp500(start_date, end_date, ALPHA_VANTAGE_API_KEY)
 
     
-    # Juntar todos os dataframes
+    ## == Create final df
     for data in [oil_df, interest_df, sp500_df]:
         if not data.empty:
             df = df.merge(data, on='date', how='left')
     
-    # Preencher valores ausentes (substituição do fillna obsoleto)
-    df = df.ffill()  # Preenche para frente
-    df = df.bfill()  # Preenche para trás (caso ainda haja NAs no início)
     
-    # Adicionar features temporais
+    df = df.ffill() 
+    df = df.bfill()
+    
+
     df['day_of_week'] = df['date'].dt.dayofweek
     df['month'] = df['date'].dt.month
     df['year'] = df['date'].dt.year
     
-    # Adicionar diferença percentual diária para todas as taxas de câmbio
     for col in ['exchange_rate_USD_EUR', 'exchange_rate_JPY_EUR', 'oil_price', 'sp500']:
         if col in df.columns:
             df[f'{col}_pct_change'] = df[col].pct_change() * 100
     
-    # Adicionar médias móveis
+
     windows = [7, 30, 90]
     for window in windows:
         for pair in ['USD_EUR', 'JPY_EUR']:
@@ -216,7 +221,6 @@ def build_complete_dataset(start_date, end_date) -> pd.DataFrame:
         if 'oil_price' in df.columns:
             df[f'oil_price_ma_{window}'] = df['oil_price'].rolling(window=window).mean()
     
-    # Remover linhas com valores NaN
     df.dropna(inplace=True)
     
     return df
